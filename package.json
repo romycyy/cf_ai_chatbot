@@ -1,0 +1,13 @@
+{
+    "name": "cf-ai-chatbot",
+    "version": "0.1.0",
+    "scripts": {
+      "build": "echo \"No build step required\"",
+      "deploy": "wrangler deploy"
+    },
+    "dependencies": {
+      "wrangler": "^3.0.0",
+      "openai": "^4.0.0"
+    }
+  }
+  
