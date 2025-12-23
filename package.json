@@ -1,5 +1,5 @@
 {
-    "name": "cf-ai-chatbot",
+    "name": "basicchatbot",
     "version": "0.1.0",
     "scripts": {
       "build": "echo \"No build step required\"",
