@@ -115,7 +115,7 @@
     inputEl.value = "";
 
     try {
-      const res = await fetch("https://basicchatbot.cyy20041234.workers.dev/chat", {
+      const res = await fetch("https://chatbot.cyy20041234.workers.dev/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: text }),
