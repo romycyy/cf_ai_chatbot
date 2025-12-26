@@ -107,23 +107,44 @@
     messagesEl.scrollTop = messagesEl.scrollHeight;
   }
 
+  function getSessionId() {
+    let sessionId = localStorage.getItem("session_id");
+    if (!sessionId) {
+      sessionId = crypto.randomUUID();
+      localStorage.setItem("session_id", sessionId);
+    }
+    return sessionId;
+  }
+
   async function sendMessage() {
     const text = inputEl.value.trim();
     if (!text) return;
 
     addMessage(text, true);
     inputEl.value = "";
+    const sessionId = getSessionId();
 
     try {
       const res = await fetch("https://chatbot.cyy20041234.workers.dev/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: { 
+          "Content-Type": "application/json",
+          "X-Session-Id": sessionId
+        },
         body: JSON.stringify({ message: text }),
       });
+
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
+        addMessage(`Error: ${errorData.error || "Failed to send message"}`, false);
+        return;
+      }
 
       const data = await res.json();
       if (data.reply) {
         addMessage(data.reply, false);
+      } else {
+        addMessage("Error: No reply received", false);
       }
     } catch (err) {
       console.error(err);
