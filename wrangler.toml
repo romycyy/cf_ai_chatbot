@@ -15,3 +15,11 @@ bindings = [
 [[migrations]]
 tag = "v1"
 new_classes = ["ChatMemoryDO"]
+
+# ===== DEV ENV =====
+[env.dev]
+name = "ai-chatbot-dev"
+
+# ===== PROD ENV =====
+[env.production]
+name = "ai-chatbot-prod"
