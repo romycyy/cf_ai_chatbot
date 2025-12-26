@@ -2,8 +2,6 @@ name = "chatbot"
 main = "src/index.ts"
 compatibility_date = "2025-12-21"
 
-[env.production]
-
 [env.staging.observability]
 enabled = true
 
@@ -18,8 +16,8 @@ new_classes = ["ChatMemoryDO"]
 
 # ===== DEV ENV =====
 [env.dev]
-name = "ai-chatbot-dev"
+name = "chatbot-dev"
 
 # ===== PROD ENV =====
 [env.production]
-name = "ai-chatbot-prod"
+name = "chatbot-prod"
