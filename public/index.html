@@ -125,7 +125,7 @@
     const sessionId = getSessionId();
 
     try {
-      const res = await fetch("https://chatbot-dev.cyy20041234.workers.dev/chat", {
+      const res = await fetch("/api/chat", {
         method: "POST",
         headers: { 
           "Content-Type": "application/json",
@@ -133,6 +133,7 @@
         },
         body: JSON.stringify({ message: text }),
       });
+
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
