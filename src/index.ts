@@ -88,31 +88,62 @@ export default {
         });
 
         const messages = [
-          { role: "system", content: "You are a helpful assistant." },
-          ...history,
-          { role: "user", content: userMessage },
+          { role: "system" as const, content: "You are a helpful assistant." },
+          ...history.map(msg => ({ role: msg.role as "user" | "assistant", content: msg.content })),
+          { role: "user" as const, content: userMessage },
         ];
 
-        // Call OpenAI's chat completions
-        const response = await openai.chat.completions.create({
+        // Save user message first
+        await appendMessage(chatMemoryStub, "user", userMessage);
+
+        // Call OpenAI's chat completions with streaming enabled
+        const stream = await openai.chat.completions.create({
           model: "gpt-4o-mini",       // Choose whichever model you want
-          messages: messages,
+          messages: messages as any,  // Type assertion for OpenAI API compatibility
           max_tokens: 150,
+          stream: true,  // Enable streaming
         });
 
-        // Extract the text reply
-        const reply = response.choices?.[0]?.message?.content || "";
+        // Create a ReadableStream to process and forward tokens
+        let fullReply = "";
         
-        if (!reply) {
-          return Response.json({ error: "No response from OpenAI" }, { status: 500 });
-        }
+        const readableStream = new ReadableStream({
+          async start(controller) {
+            const encoder = new TextEncoder();
+            
+            try {
+              for await (const chunk of stream) {
+                const content = chunk.choices[0]?.delta?.content || "";
+                if (content) {
+                  fullReply += content;
+                  // Send each token as JSON: { "token": "..." }
+                  const data = JSON.stringify({ token: content }) + "\n";
+                  controller.enqueue(encoder.encode(data));
+                }
+              }
+              
+              // After streaming completes, save the full reply to memory
+              if (fullReply) {
+                await appendMessage(chatMemoryStub, "assistant", fullReply);
+              }
+              
+              // Send completion signal
+              controller.enqueue(encoder.encode(JSON.stringify({ done: true }) + "\n"));
+              controller.close();
+            } catch (error) {
+              console.error("Streaming error:", error);
+              controller.error(error);
+            }
+          },
+        });
 
-        // Save user message first, then assistant reply to maintain correct conversation order
-        await appendMessage(chatMemoryStub, "user", userMessage);
-        await appendMessage(chatMemoryStub, "assistant", reply);
-
-        return Response.json({ reply }, {
-          headers: { "Access-Control-Allow-Origin": "*" },
+        return new Response(readableStream, {
+          headers: {
+            "Content-Type": "text/event-stream",
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+          },
         });
 
       } catch (err) {
