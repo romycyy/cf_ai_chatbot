@@ -17,7 +17,7 @@ new_sqlite_classes = ["ChatMemoryDO"]
 
 # ===== PROD ENV =====
 [env.production]
-name = "chatbot-prod"
+name = "chatbot"
 
 [env.production.durable_objects]
 bindings = [
