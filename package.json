@@ -1,13 +1,13 @@
 {
     "name": "chatbot",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "scripts": {
       "build": "echo \"No build step required\"",
       "deploy": "wrangler deploy"
     },
     "dependencies": {
-      "wrangler": "^3.0.0",
-      "openai": "^4.0.0"
+      "wrangler": "^4.54.0",
+      "openai": "^6.15.0"
     }
   }
   
