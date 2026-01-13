@@ -5,7 +5,17 @@ export async function streamChat(
   sessionId: string,
   onToken: (t: string) => void
 ) {
-  const res = await fetch(import.meta.env.VITE_API_BASE + "/chat", {
+  const apiBase =
+    import.meta.env.VITE_API_BASE ??
+    (import.meta.env.DEV ? "http://127.0.0.1:8787" : "");
+
+  if (!apiBase) {
+    throw new Error(
+      "Missing VITE_API_BASE. Set frontend/.env (e.g. VITE_API_BASE=http://127.0.0.1:8787) or configure it in your deployment environment."
+    );
+  }
+
+  const res = await fetch(apiBase.replace(/\/+$/, "") + "/chat", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -15,8 +25,18 @@ export async function streamChat(
   });
 
   if (!res.ok) {
-    const errorData = await res.json().catch(() => ({ error: "Unknown error" }));
-    throw new Error(errorData.error || `HTTP error! status: ${res.status}`);
+    const raw = await res.text().catch(() => "");
+    const errorData = (() => {
+      try {
+        return JSON.parse(raw) as { error?: string };
+      } catch {
+        return { error: undefined };
+      }
+    })();
+    throw new Error(
+      errorData.error ||
+        (raw ? `${res.status} ${res.statusText}: ${raw}` : `${res.status} ${res.statusText}`)
+    );
   }
 
   const reader = res.body?.getReader();
