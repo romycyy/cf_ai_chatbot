@@ -151,6 +151,7 @@ async function sendMessage() {
       const raw = await res.text().catch(() => "");
       botDiv.textContent =
         `Error: ${res.status} ${res.statusText}` +
+        `\n\nRequest: POST ${url}` +
         (raw ? `\n\n${raw}` : "") +
         (!res.body && res.ok ? "\n\n(Note: response body is not streamable in this browser/proxy.)" : "") +
         (contentType ? `\n\n(Content-Type: ${contentType})` : "");
