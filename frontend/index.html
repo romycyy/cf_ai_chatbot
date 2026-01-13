@@ -86,7 +86,7 @@
   </div>
 </div>
 
-<script>
+<script type="module">
 const messagesEl = document.getElementById("messages");
 const inputEl = document.getElementById("inputText");
 
@@ -108,6 +108,20 @@ function getSessionId() {
   return id;
 }
 
+function getApiBase() {
+  // Prefer explicit config, then Vite env, then a sensible dev default, then same-origin.
+  // - VITE_API_BASE example: http://127.0.0.1:8787
+  // - In production you can set it to your deployed Worker URL (or leave empty for same-origin).
+  const explicit = globalThis.__API_BASE__;
+  const fromVite = typeof import.meta !== "undefined" ? import.meta.env?.VITE_API_BASE : undefined;
+  const apiBase =
+    explicit ??
+    fromVite ??
+    ((typeof import.meta !== "undefined" && import.meta.env?.DEV) ? "http://127.0.0.1:8787" : "");
+
+  return String(apiBase || "").replace(/\/+$/, "");
+}
+
 async function sendMessage() {
   const text = inputEl.value.trim();
   if (!text) return;
@@ -119,7 +133,10 @@ async function sendMessage() {
   const sessionId = getSessionId();
 
   try {
-    const res = await fetch("/api/chat", {
+    const apiBase = getApiBase();
+    const url = (apiBase ? apiBase : "") + "/chat";
+
+    const res = await fetch(url, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -129,7 +146,15 @@ async function sendMessage() {
     });
 
     if (!res.ok || !res.body) {
-      botDiv.textContent = "Error: failed to stream response";
+      // Show the real server response to make debugging easy.
+      const contentType = res.headers.get("content-type") || "";
+      const raw = await res.text().catch(() => "");
+      botDiv.textContent =
+        `Error: ${res.status} ${res.statusText}` +
+        (raw ? `\n\n${raw}` : "") +
+        (!res.body && res.ok ? "\n\n(Note: response body is not streamable in this browser/proxy.)" : "") +
+        (contentType ? `\n\n(Content-Type: ${contentType})` : "");
+      console.error("Chat request failed:", { url, status: res.status, statusText: res.statusText, contentType, raw });
       return;
     }
 
@@ -156,6 +181,10 @@ async function sendMessage() {
 inputEl.addEventListener("keydown", e => {
   if (e.key === "Enter") sendMessage();
 });
+
+// Needed because this script is a module (so top-level names aren't globals),
+// but the HTML uses `onclick="sendMessage()"`.
+globalThis.sendMessage = sendMessage;
 </script>
 </body>
 </html>
