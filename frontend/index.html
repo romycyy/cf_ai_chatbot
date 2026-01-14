@@ -1,196 +1,165 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Cloudflare AI Chatbot</title>
+  <meta charset="UTF-8" />
+  <title>Cloudflare Chatbot (Minimal)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-<script>
-  // This value will be replaced at deploy time
-  window.__API_BASE__ = "__API_BASE__";
-</script>
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #f6f7f9;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+    }
 
-<style>
-  body {
-    font-family: Arial, sans-serif;
-    background: #f4f4f9;
-    margin: 0;
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-  }
-  .chat-container {
-    width: 100%;
-    max-width: 500px;
-    height: 90%;
-    background: white;
-    border-radius: 12px;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-  .messages {
-    flex: 1;
-    padding: 16px;
-    overflow-y: auto;
-    background: #fafafa;
-  }
-  .message {
-    max-width: 75%;
-    margin-bottom: 8px;
-    padding: 10px 14px;
-    border-radius: 18px;
-    font-size: 15px;
-    line-height: 1.4;
-    word-wrap: break-word;
-  }
-  .user {
-    margin-left: auto;
-    background: #4e9cff;
-    color: white;
-    border-bottom-right-radius: 4px;
-  }
-  .bot {
-    margin-right: auto;
-    background: #e5e5ea;
-    color: black;
-    border-bottom-left-radius: 4px;
-  }
-  .input-bar {
-    display: flex;
-    padding: 10px;
-    border-top: 1px solid #ddd;
-  }
-  input {
-    flex: 1;
-    padding: 10px;
-    font-size: 15px;
-    border-radius: 8px;
-    border: 1px solid #ccc;
-  }
-  button {
-    margin-left: 8px;
-    padding: 10px 16px;
-    font-size: 15px;
-    border: none;
-    border-radius: 8px;
-    background: #007bff;
-    color: white;
-    cursor: pointer;
-  }
-</style>
+    .chat-box {
+      width: 420px;
+      height: 600px;
+      background: white;
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .messages {
+      flex: 1;
+      padding: 16px;
+      overflow-y: auto;
+      border-bottom: 1px solid #eee;
+    }
+
+    .message {
+      margin-bottom: 12px;
+    }
+
+    .user {
+      font-weight: bold;
+    }
+
+    .input-row {
+      display: flex;
+      padding: 12px;
+      gap: 8px;
+    }
+
+    input {
+      flex: 1;
+      padding: 8px;
+      font-size: 14px;
+    }
+
+    button {
+      padding: 8px 12px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+  </style>
 </head>
 
 <body>
-<div class="chat-container">
-  <div id="messages" class="messages"></div>
-  <div class="input-bar">
-    <input id="inputText" placeholder="Type a message..." />
-    <button onclick="sendMessage()">Send</button>
+  <div class="chat-box">
+    <div id="messages" class="messages"></div>
+
+    <div class="input-row">
+      <input
+        id="input"
+        type="text"
+        placeholder="Type a message..."
+        autocomplete="off"
+      />
+      <button id="send">Send</button>
+    </div>
   </div>
-</div>
 
-<script type="module">
-const messagesEl = document.getElementById("messages");
-const inputEl = document.getElementById("inputText");
+  <script>
+    /** ===============================
+     * Configuration
+     * =============================== */
 
-function addMessage(text, isUser) {
-  const div = document.createElement("div");
-  div.className = `message ${isUser ? "user" : "bot"}`;
-  div.textContent = text;
-  messagesEl.appendChild(div);
-  messagesEl.scrollTop = messagesEl.scrollHeight;
-  return div;
-}
+    // CHANGE THIS to your deployed worker URL
+    const API_URL = "https://chatbot-dev.cyy20041234.workers.dev/chat";
 
-function getSessionId() {
-  let id = localStorage.getItem("session_id");
-  if (!id) {
-    id = crypto.randomUUID();
-    localStorage.setItem("session_id", id);
-  }
-  return id;
-}
+    /** ===============================
+     * Session handling
+     * =============================== */
 
-function getApiBase() {
-  // Prefer explicit config, then Vite env, then a sensible dev default, then same-origin.
-  // - VITE_API_BASE example: http://127.0.0.1:8787
-  // - In production you can set it to your deployed Worker URL (or leave empty for same-origin).
-  const explicit = globalThis.__API_BASE__;
-  const fromVite = typeof import.meta !== "undefined" ? import.meta.env?.VITE_API_BASE : undefined;
-  const apiBase =
-    explicit ??
-    fromVite ??
-    ((typeof import.meta !== "undefined" && import.meta.env?.DEV) ? "http://127.0.0.1:8787" : "");
-
-  return String(apiBase || "").replace(/\/+$/, "");
-}
-
-async function sendMessage() {
-  const text = inputEl.value.trim();
-  if (!text) return;
-
-  addMessage(text, true);
-  inputEl.value = "";
-
-  const botDiv = addMessage("", false);
-  const sessionId = getSessionId();
-
-  try {
-    const apiBase = getApiBase();
-    const url = (apiBase ? apiBase : "") + "/chat";
-
-    const res = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Session-Id": sessionId
-      },
-      body: JSON.stringify({ message: text })
-    });
-
-    if (!res.ok || !res.body) {
-      // Show the real server response to make debugging easy.
-      const contentType = res.headers.get("content-type") || "";
-      const raw = await res.text().catch(() => "");
-      botDiv.textContent =
-        `Error: ${res.status} ${res.statusText}` +
-        `\n\nRequest: POST ${url}` +
-        (raw ? `\n\n${raw}` : "") +
-        (!res.body && res.ok ? "\n\n(Note: response body is not streamable in this browser/proxy.)" : "") +
-        (contentType ? `\n\n(Content-Type: ${contentType})` : "");
-      console.error("Chat request failed:", { url, status: res.status, statusText: res.statusText, contentType, raw });
-      return;
+    function getSessionId() {
+      let id = localStorage.getItem("sessionId");
+      if (!id) {
+        id = crypto.randomUUID();
+        localStorage.setItem("sessionId", id);
+      }
+      return id;
     }
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder();
+    /** ===============================
+     * DOM helpers
+     * =============================== */
 
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
+    const messagesEl = document.getElementById("messages");
+    const inputEl = document.getElementById("input");
+    const sendBtn = document.getElementById("send");
 
-      botDiv.textContent += decoder.decode(value, { stream: true });
+    function addMessage(text, isUser) {
+      const div = document.createElement("div");
+      div.className = "message";
+      div.innerHTML = `<span class="${isUser ? "user" : ""}">
+        ${isUser ? "You" : "Bot"}:
+      </span> ${text}`;
+      messagesEl.appendChild(div);
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    // Flush remaining UTF-8 bytes
-    botDiv.textContent += decoder.decode();
+    /** ===============================
+     * Chat logic
+     * =============================== */
 
-  } catch (err) {
-    console.error(err);
-    botDiv.textContent = "Error: failed to send";
-  }
-}
+    async function sendMessage() {
+      const text = inputEl.value.trim();
+      if (!text) return;
 
-inputEl.addEventListener("keydown", e => {
-  if (e.key === "Enter") sendMessage();
-});
+      addMessage(text, true);
+      inputEl.value = "";
 
-// Needed because this script is a module (so top-level names aren't globals),
-// but the HTML uses `onclick="sendMessage()"`.
-globalThis.sendMessage = sendMessage;
-</script>
+      try {
+        const res = await fetch(API_URL, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "X-Session-Id": getSessionId()
+          },
+          body: JSON.stringify({ message: text })
+        });
+
+        if (!res.ok) {
+          const err = await res.text();
+          addMessage(`Error: ${err}`, false);
+          return;
+        }
+
+        const data = await res.json();
+        addMessage(data.reply ?? "(no reply)", false);
+
+      } catch (err) {
+        addMessage("Network error", false);
+        console.error(err);
+      }
+    }
+
+    /** ===============================
+     * Event listeners
+     * =============================== */
+
+    sendBtn.addEventListener("click", sendMessage);
+    inputEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") sendMessage();
+    });
+  </script>
 </body>
 </html>
