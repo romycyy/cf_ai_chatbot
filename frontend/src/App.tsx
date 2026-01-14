@@ -28,7 +28,14 @@ export default function App() {
   useEffect(() => {
     const el = messagesElRef.current;
     if (!el) return;
-    el.scrollTop = el.scrollHeight;
+    // Only auto-scroll if the user is already near the bottom.
+    // This lets users scroll up to read older messages without being yanked down,
+    // while still keeping the "chat sticks to latest" behavior for normal usage.
+    const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
+    const NEAR_BOTTOM_PX = 48;
+    if (distanceFromBottom < NEAR_BOTTOM_PX) {
+      el.scrollTop = el.scrollHeight;
+    }
   }, [messages]);
 
   const addMessage = (text: string, isUser: boolean) => {

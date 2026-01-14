@@ -9,9 +9,9 @@ body {
 }
 
 .chat-container {
-  width: 100%;
-  max-width: 500px;
-  height: 90%;
+  width: 500px;
+  max-width: calc(100vw - 32px);
+  height: 90vh;
   background: white;
   border-radius: 12px;
   display: flex;
@@ -21,6 +21,7 @@ body {
 
 .messages {
   flex: 1;
+  min-height: 0;
   padding: 16px;
   overflow-y: auto;
   background: #fafafa;
@@ -33,7 +34,8 @@ body {
   border-radius: 18px;
   font-size: 15px;
   line-height: 1.4;
-  word-wrap: break-word;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .user {
