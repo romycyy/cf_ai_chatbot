@@ -1,10 +1,7 @@
-import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
-import { ChatSettingsProvider } from "./context/ChatSettingsContext";
+import "./styles.css";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
-  <ChatSettingsProvider>
-    <App />
-  </ChatSettingsProvider>
+  <App />
 );
