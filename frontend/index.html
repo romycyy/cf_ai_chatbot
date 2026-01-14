@@ -1,165 +1,161 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Cloudflare Chatbot (Minimal)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Cloudflare AI Chatbot</title>
 
-  <style>
-    body {
-      font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
-      background: #f6f7f9;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-    }
-
-    .chat-box {
-      width: 420px;
-      height: 600px;
-      background: white;
-      border-radius: 8px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.1);
-      display: flex;
-      flex-direction: column;
-    }
-
-    .messages {
-      flex: 1;
-      padding: 16px;
-      overflow-y: auto;
-      border-bottom: 1px solid #eee;
-    }
-
-    .message {
-      margin-bottom: 12px;
-    }
-
-    .user {
-      font-weight: bold;
-    }
-
-    .input-row {
-      display: flex;
-      padding: 12px;
-      gap: 8px;
-    }
-
-    input {
-      flex: 1;
-      padding: 8px;
-      font-size: 14px;
-    }
-
-    button {
-      padding: 8px 12px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-  </style>
+<style>
+  body {
+    font-family: Arial, sans-serif;
+    background: #f4f4f9;
+    margin: 0;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  .chat-container {
+    width: 100%;
+    max-width: 500px;
+    height: 90%;
+    background: white;
+    border-radius: 12px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .messages {
+    flex: 1;
+    padding: 16px;
+    overflow-y: auto;
+    background: #fafafa;
+  }
+  .message {
+    max-width: 75%;
+    margin-bottom: 8px;
+    padding: 10px 14px;
+    border-radius: 18px;
+    font-size: 15px;
+    line-height: 1.4;
+    word-wrap: break-word;
+  }
+  .user {
+    margin-left: auto;
+    background: #4e9cff;
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+  .bot {
+    margin-right: auto;
+    background: #e5e5ea;
+    color: black;
+    border-bottom-left-radius: 4px;
+  }
+  .input-bar {
+    display: flex;
+    padding: 10px;
+    border-top: 1px solid #ddd;
+  }
+  input {
+    flex: 1;
+    padding: 10px;
+    font-size: 15px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+  }
+  button {
+    margin-left: 8px;
+    padding: 10px 16px;
+    font-size: 15px;
+    border: none;
+    border-radius: 8px;
+    background: #007bff;
+    color: white;
+    cursor: pointer;
+  }
+</style>
 </head>
 
 <body>
-  <div class="chat-box">
-    <div id="messages" class="messages"></div>
-
-    <div class="input-row">
-      <input
-        id="input"
-        type="text"
-        placeholder="Type a message..."
-        autocomplete="off"
-      />
-      <button id="send">Send</button>
-    </div>
+<div class="chat-container">
+  <div id="messages" class="messages"></div>
+  <div class="input-bar">
+    <input id="inputText" placeholder="Type a message..." />
+    <button onclick="sendMessage()">Send</button>
   </div>
+</div>
 
-  <script>
-    /** ===============================
-     * Configuration
-     * =============================== */
+<script>
+const messagesEl = document.getElementById("messages");
+const inputEl = document.getElementById("inputText");
+const API_URL = "https://chatbot-dev.cyy20041234.workers.dev/chat";
+function addMessage(text, isUser) {
+  const div = document.createElement("div");
+  div.className = `message ${isUser ? "user" : "bot"}`;
+  div.textContent = text;
+  messagesEl.appendChild(div);
+  messagesEl.scrollTop = messagesEl.scrollHeight;
+  return div;
+}
 
-    // CHANGE THIS to your deployed worker URL
-    const API_URL = "https://chatbot-dev.cyy20041234.workers.dev/chat";
+function getSessionId() {
+  let id = localStorage.getItem("session_id");
+  if (!id) {
+    id = crypto.randomUUID();
+    localStorage.setItem("session_id", id);
+  }
+  return id;
+}
 
-    /** ===============================
-     * Session handling
-     * =============================== */
+async function sendMessage() {
+  const text = inputEl.value.trim();
+  if (!text) return;
 
-    function getSessionId() {
-      let id = localStorage.getItem("sessionId");
-      if (!id) {
-        id = crypto.randomUUID();
-        localStorage.setItem("sessionId", id);
-      }
-      return id;
+  addMessage(text, true);
+  inputEl.value = "";
+
+  const botDiv = addMessage("", false);
+  const sessionId = getSessionId();
+
+  try {
+    const res = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Session-Id": sessionId
+      },
+      body: JSON.stringify({ message: text })
+    });
+
+    if (!res.ok || !res.body) {
+      botDiv.textContent = "Error: failed to stream response";
+      return;
     }
 
-    /** ===============================
-     * DOM helpers
-     * =============================== */
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
 
-    const messagesEl = document.getElementById("messages");
-    const inputEl = document.getElementById("input");
-    const sendBtn = document.getElementById("send");
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) break;
 
-    function addMessage(text, isUser) {
-      const div = document.createElement("div");
-      div.className = "message";
-      div.innerHTML = `<span class="${isUser ? "user" : ""}">
-        ${isUser ? "You" : "Bot"}:
-      </span> ${text}`;
-      messagesEl.appendChild(div);
+      botDiv.textContent += decoder.decode(value, { stream: true });
       messagesEl.scrollTop = messagesEl.scrollHeight;
     }
 
-    /** ===============================
-     * Chat logic
-     * =============================== */
+    // Flush remaining UTF-8 bytes
+    botDiv.textContent += decoder.decode();
 
-    async function sendMessage() {
-      const text = inputEl.value.trim();
-      if (!text) return;
+  } catch (err) {
+    console.error(err);
+    botDiv.textContent = "Error: failed to send";
+  }
+}
 
-      addMessage(text, true);
-      inputEl.value = "";
-
-      try {
-        const res = await fetch(API_URL, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "X-Session-Id": getSessionId()
-          },
-          body: JSON.stringify({ message: text })
-        });
-
-        if (!res.ok) {
-          const err = await res.text();
-          addMessage(`Error: ${err}`, false);
-          return;
-        }
-
-        const data = await res.json();
-        addMessage(data.reply ?? "(no reply)", false);
-
-      } catch (err) {
-        addMessage("Network error", false);
-        console.error(err);
-      }
-    }
-
-    /** ===============================
-     * Event listeners
-     * =============================== */
-
-    sendBtn.addEventListener("click", sendMessage);
-    inputEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter") sendMessage();
-    });
-  </script>
+inputEl.addEventListener("keydown", e => {
+  if (e.key === "Enter") sendMessage();
+});
+</script>
 </body>
 </html>
