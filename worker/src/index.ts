@@ -18,18 +18,15 @@ export const CORS_HEADERS = {
 export default {
   async fetch(
     request: Request,
-    env: Env,
-    ctx: ExecutionContext
+    env: Env
   ): Promise<Response> {
     const url = new URL(request.url);
     const pathname = url.pathname.replace(/\/+$/, "") || "/";
 
-    // CORS preflight
     if (request.method === "OPTIONS") {
       return new Response(null, { headers: CORS_HEADERS });
     }
 
-    // Health check (easy to test directly in browser)
     if (request.method === "GET" && (pathname === "/" || pathname === "/health")) {
       return new Response(JSON.stringify({ ok: true }), {
         status: 200,
@@ -37,12 +34,10 @@ export default {
       });
     }
 
-    // Route: POST /chat
     if (request.method === "POST" && pathname === "/chat") {
-      return handleChat(request, env, ctx);
+      return handleChat(request, env);
     }
 
-    // Helpful errors for direct access / debugging
     if (pathname === "/chat") {
       return new Response(
         JSON.stringify({ error: "Method Not Allowed. Use POST /chat." }),

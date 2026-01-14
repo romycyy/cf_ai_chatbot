@@ -2,13 +2,18 @@
 import OpenAI from "openai";
 import { Env, CORS_HEADERS } from "../index";
 
-/* ---------- types ---------- */
-
 interface ChatRequestBody {
   message?: string;
 }
 
-/* ---------- helpers ---------- */
+type HistoryMessage = { role: "user" | "assistant"; content: string };
+
+function json(data: unknown, status = 200): Response {
+  return new Response(JSON.stringify(data), {
+    status,
+    headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
+  });
+}
 
 function getSessionId(req: Request): string {
   const id = req.headers.get("X-Session-Id");
@@ -23,10 +28,10 @@ function getMemoryStub(env: Env, sessionId: string): DurableObjectStub {
 async function getHistory(
   stub: DurableObjectStub,
   limit = 20
-): Promise<Array<{ role: "user" | "assistant"; content: string }>> {
+): Promise<HistoryMessage[]> {
   const res = await stub.fetch(`https://memory/history?limit=${limit}`);
   if (!res.ok) return [];
-  const data = (await res.json()) as { messages?: Array<{ role: "user" | "assistant"; content: string }> };
+  const data = (await res.json()) as { messages?: HistoryMessage[] };
   return data.messages ?? [];
 }
 
@@ -42,12 +47,9 @@ async function appendMessage(
   });
 }
 
-/* ---------- handler ---------- */
-
 export async function handleChat(
   request: Request,
-  env: Env,
-  ctx: ExecutionContext
+  env: Env
 ): Promise<Response> {
   try {
     const sessionId = getSessionId(request);
@@ -101,10 +103,7 @@ export async function handleChat(
             controller.enqueue(encoder.encode(token));
           }
         } catch (err) {
-          console.error("Stream error:", err);
-          controller.enqueue(
-            encoder.encode("\n[Error generating response]")
-          );
+          controller.enqueue(encoder.encode("\n[Error generating response]"));
         } finally {
           if (fullReply) {
             await appendMessage(memory, "assistant", fullReply);
@@ -122,7 +121,6 @@ export async function handleChat(
       },
     });
   } catch (err) {
-    console.error(err);
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
       headers: { ...CORS_HEADERS, "Content-Type": "application/json" },

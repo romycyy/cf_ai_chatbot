@@ -1,10 +1,21 @@
 export type Role = "user" | "assistant" | "system";
 export type Msg = { role: Role; content: string; ts: number };
 
-export class ChatMemoryDO {
-  state: DurableObjectState;
+type DurableObjectStateLike = {
+  storage: {
+    get<T>(key: string): Promise<T | undefined>;
+    put(key: string, value: unknown): Promise<void>;
+  };
+};
 
-  constructor(state: DurableObjectState) {
+export class ChatMemoryDO {
+  private readonly state: DurableObjectStateLike;
+
+  private static readonly STORAGE_KEY = "messages";
+  private static readonly DEFAULT_LIMIT = 20;
+  private static readonly MAX_MESSAGES = 40;
+
+  constructor(state: DurableObjectStateLike) {
     this.state = state;
   }
 
@@ -13,8 +24,11 @@ export class ChatMemoryDO {
     const pathname = url.pathname;
 
     if (request.method === "GET" && pathname === "/history") {
-      const limit = Math.max(1, Math.min(200, Number(url.searchParams.get("limit") ?? "20")));
-      const messages = (await this.state.storage.get<Msg[]>("messages")) ?? [];
+      const limit = Math.max(
+        1,
+        Math.min(200, Number(url.searchParams.get("limit") ?? ChatMemoryDO.DEFAULT_LIMIT))
+      );
+      const messages = (await this.state.storage.get<Msg[]>(ChatMemoryDO.STORAGE_KEY)) ?? [];
       return Response.json({ messages: messages.slice(-limit) });
     }
 
@@ -24,19 +38,12 @@ export class ChatMemoryDO {
         return new Response("Bad Request", { status: 400 });
       }
 
-      const messages = (await this.state.storage.get<Msg[]>("messages")) ?? [];
+      const messages = (await this.state.storage.get<Msg[]>(ChatMemoryDO.STORAGE_KEY)) ?? [];
       messages.push({ role: body.role, content: body.content, ts: Date.now() });
 
-      // trim
-      const MAX = 40; // keep last 40 messages
-      const trimmed = messages.slice(-MAX);
+      const trimmed = messages.slice(-ChatMemoryDO.MAX_MESSAGES);
 
-      await this.state.storage.put("messages", trimmed);
-      return new Response("OK");
-    }
-
-    if (request.method === "POST" && pathname === "/reset") {
-      await this.state.storage.delete("messages");
+      await this.state.storage.put(ChatMemoryDO.STORAGE_KEY, trimmed);
       return new Response("OK");
     }
 
