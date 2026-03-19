@@ -160,6 +160,18 @@ body {
   background: #007bff;
   color: white;
   cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.input-bar input:disabled {
+  background: #f0f0f0;
+  color: #999;
+  cursor: not-allowed;
+}
+
+.input-bar button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
 /* ---------- settings side panel ---------- */

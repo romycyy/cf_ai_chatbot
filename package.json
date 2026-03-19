@@ -1,0 +1,12 @@
+{
+  "name": "cf-ai",
+  "private": true,
+  "workspaces": ["shared", "worker", "frontend"],
+  "scripts": {
+    "dev:frontend": "npm run dev -w frontend",
+    "build:frontend": "npm run build -w frontend",
+    "deploy:dev": "npm run deploy:dev -w worker",
+    "deploy:prod": "npm run deploy:prod -w worker",
+    "typecheck": "npm run typecheck --workspaces --if-present"
+  }
+}

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { type Mode, MODES, MODELS } from "@cf-ai/shared";
 
 type ChatMessage = {
   id: string;
@@ -6,32 +7,14 @@ type ChatMessage = {
   isUser: boolean;
 };
 
-const API_URL = "https://chatbot-dev.cyy20041234.workers.dev/chat";
-const SESSION_STORAGE_KEY = "session_id";
-
-type Mode = "general" | "teaching" | "coding" | "writing" | "creative";
-
-const MODES: { value: Mode; label: string; icon: string }[] = [
-  { value: "general", label: "General", icon: "💬" },
-  { value: "teaching", label: "Teaching", icon: "📚" },
-  { value: "coding", label: "Coding", icon: "💻" },
-  { value: "writing", label: "Writing", icon: "✍️" },
-  { value: "creative", label: "Creative", icon: "🎨" },
-];
-
-const MODELS = [
-  { value: "gpt-4o-mini", label: "GPT-4o Mini", desc: "Fast & affordable" },
-  { value: "gpt-4o", label: "GPT-4o", desc: "Most capable" },
-  { value: "gpt-4-turbo", label: "GPT-4 Turbo", desc: "High throughput" },
-  { value: "gpt-3.5-turbo", label: "GPT-3.5 Turbo", desc: "Legacy, low cost" },
-  { value: "o1-mini", label: "o1-mini", desc: "Reasoning model" },
-] as const;
+const API_URL = import.meta.env.VITE_API_URL;
+const LOCAL_STORAGE_KEY = "session_id";
 
 function getSessionId() {
-  let id = localStorage.getItem(SESSION_STORAGE_KEY);
+  let id = localStorage.getItem(LOCAL_STORAGE_KEY);
   if (!id) {
     id = crypto.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-    localStorage.setItem(SESSION_STORAGE_KEY, id);
+    localStorage.setItem(LOCAL_STORAGE_KEY, id);
   }
   return id;
 }
@@ -43,6 +26,7 @@ export default function App() {
   const [model, setModel] = useState("gpt-4o-mini");
   const [maxTokens, setMaxTokens] = useState(1024);
   const [panelOpen, setPanelOpen] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
 
   const messagesElRef = useRef<HTMLDivElement | null>(null);
   const sessionId = useMemo(() => getSessionId(), []);
@@ -75,10 +59,11 @@ export default function App() {
 
   const sendMessage = async () => {
     const text = inputText.trim();
-    if (!text) return;
+    if (!text || isStreaming) return;
 
     addMessage(text, true);
     setInputText("");
+    setIsStreaming(true);
 
     const botId = addMessage("", false);
 
@@ -117,6 +102,8 @@ export default function App() {
       setMessages((m) =>
         m.map((msg) => (msg.id === botId ? { ...msg, text: "Error: failed to send" } : msg))
       );
+    } finally {
+      setIsStreaming(false);
     }
   };
 
@@ -156,14 +143,17 @@ export default function App() {
         <div className="input-bar">
           <input
             id="inputText"
-            placeholder="Type a message..."
+            placeholder={isStreaming ? "Waiting for response..." : "Type a message..."}
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === "Enter") sendMessage();
             }}
+            disabled={isStreaming}
           />
-          <button onClick={sendMessage}>Send</button>
+          <button onClick={sendMessage} disabled={isStreaming}>
+            {isStreaming ? "..." : "Send"}
+          </button>
         </div>
       </div>
 

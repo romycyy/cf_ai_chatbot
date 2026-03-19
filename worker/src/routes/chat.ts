@@ -1,42 +1,16 @@
-// worker/src/routes/chat.ts
 import OpenAI from "openai";
 import { Env, CORS_HEADERS } from "../index";
-
-type Mode = "general" | "teaching" | "coding" | "writing" | "creative";
-
-const ALLOWED_MODELS = [
-  "gpt-4o-mini",
-  "gpt-4o",
-  "gpt-4-turbo",
-  "gpt-3.5-turbo",
-  "o1-mini",
-] as const;
-type AllowedModel = (typeof ALLOWED_MODELS)[number];
-
-const DEFAULT_MODEL: AllowedModel = "gpt-4o-mini";
-const MIN_TOKENS = 50;
-const MAX_TOKENS = 4096;
-const DEFAULT_MAX_TOKENS = 150;
-
-interface ChatRequestBody {
-  message?: string;
-  mode?: Mode;
-  model?: string;
-  maxTokens?: number;
-}
-
-const SYSTEM_PROMPTS: Record<Mode, string> = {
-  general:
-    "You are a helpful assistant. Answer questions clearly and concisely.",
-  teaching:
-    "You are a patient and encouraging teacher. Explain concepts step by step, use analogies, ask guiding questions, and check for understanding. Adapt your explanation level to the learner.",
-  coding:
-    "You are an expert software engineer. Provide clear, idiomatic code with brief explanations. Mention edge cases, performance considerations, and best practices when relevant.",
-  writing:
-    "You are a skilled writing assistant. Help with grammar, tone, structure, and clarity. Offer concrete suggestions and alternatives while preserving the author's voice.",
-  creative:
-    "You are a creative brainstorming partner. Think outside the box, offer multiple ideas, build on concepts, and encourage exploration. Be imaginative and playful.",
-};
+import {
+  type Mode,
+  type AllowedModel,
+  type ChatRequestBody,
+  ALLOWED_MODELS,
+  DEFAULT_MODEL,
+  MIN_TOKENS,
+  MAX_TOKENS,
+  DEFAULT_MAX_TOKENS,
+  SYSTEM_PROMPTS,
+} from "@cf-ai/shared";
 
 type HistoryMessage = { role: "user" | "assistant"; content: string };
 
@@ -45,12 +19,6 @@ function json(data: unknown, status = 200): Response {
     status,
     headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
   });
-}
-
-function getSessionId(req: Request): string {
-  const id = req.headers.get("X-Session-Id");
-  if (!id) throw new Error("Missing X-Session-Id header");
-  return id;
 }
 
 function getMemoryStub(env: Env, sessionId: string): DurableObjectStub {
@@ -84,25 +52,23 @@ export async function handleChat(
   env: Env
 ): Promise<Response> {
   try {
-    const sessionId = getSessionId(request);
+    const sessionId = request.headers.get("X-Session-Id");
+    if (!sessionId) {
+      return json({ error: "Missing X-Session-Id header" }, 400);
+    }
+
     const memory = getMemoryStub(env, sessionId);
 
     let body: ChatRequestBody;
     try {
       body = (await request.json()) as ChatRequestBody;
-    } catch (e) {
-      return new Response(JSON.stringify({ error: "Invalid JSON" }), {
-        status: 400,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+    } catch {
+      return json({ error: "Invalid JSON" }, 400);
     }
 
     const { message, mode = "general", model, maxTokens } = body;
     if (!message) {
-      return new Response(JSON.stringify({ error: "Message is required" }), {
-        status: 400,
-        headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-      });
+      return json({ error: "Message is required" }, 400);
     }
 
     const resolvedModel: AllowedModel =
@@ -165,9 +131,7 @@ export async function handleChat(
       },
     });
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500,
-      headers: { ...CORS_HEADERS, "Content-Type": "application/json" },
-    });
+    console.error("handleChat error:", err);
+    return json({ error: "Internal server error" }, 500);
   }
 }
