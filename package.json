@@ -1,13 +1,12 @@
 {
-    "name": "chatbot",
-    "version": "0.1.2",
-    "scripts": {
-      "build": "echo \"No build step required\"",
-      "deploy": "wrangler deploy"
-    },
-    "dependencies": {
-      "wrangler": "^4.54.0",
-      "openai": "^6.15.0"
-    }
+  "name": "cf-ai",
+  "private": true,
+  "workspaces": ["shared", "worker", "frontend"],
+  "scripts": {
+    "dev:frontend": "npm run dev -w frontend",
+    "build:frontend": "npm run build -w frontend",
+    "deploy:dev": "npm run deploy:dev -w worker",
+    "deploy:prod": "npm run deploy:prod -w worker",
+    "typecheck": "npm run typecheck --workspaces --if-present"
   }
-  
+}

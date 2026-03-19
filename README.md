@@ -1,131 +1,223 @@
 # Cloudflare AI Chatbot
 
-A serverless AI chatbot built on **Cloudflare Pages**, **Workers**, and **Durable Objects**, with **session-based memory** and global edge deployment.
-
----
+A serverless AI chatbot with a **React (Vite) frontend** and a **Cloudflare Worker** backend that streams responses and stores **session-based memory** in a **Durable Object**.
 
 ## Features
 
-- Edge-deployed chat API (Cloudflare Workers)
-- Session-based conversation memory (Durable Objects)
-- Streaming Response (ReadableStream)
-- Stateless frontend + stateful backend
-- Secure API key storage (Cloudflare Secrets)
-- Simple responsive web UI
-
----
+- **Streaming chat**: tokens are streamed from the Worker to the browser via `ReadableStream`
+- **Session memory**: conversation history is stored per session in a Durable Object (`CHAT_MEMORY`)
+- **Mode selection**: choose a conversation mode (General, Teaching, Coding, Writing, Creative) — each mode uses a tailored system prompt
+- **Model selection**: pick from GPT-4o Mini, GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo, or o1-mini via a settings side panel
+- **Max tokens control**: adjust the response length (50–4096 tokens) with a slider
+- **Conversation preservation**: switching models or modes mid-conversation is seamless — history is stored independently and the new model continues from where the previous one left off
+- **Shared contract**: `@cf-ai/shared` keeps modes, models, limits, and system prompts aligned between the UI and Worker
+- **Secure secret storage**: `OPENAI_API_KEY` is stored as a Cloudflare secret (or `worker/.dev.vars` locally)
 
 ## Architecture
 
 ```text
-Browser
+Browser (Vite + React)
+  ↓  POST /chat  { message, mode, model, maxTokens }
+  ↓  Header: X-Session-Id
+Cloudflare Worker
+  ↓  stub.fetch() → Durable Object (per session)
+Durable Object (ChatMemoryDO)  ←→  persistent message list
   ↓
-Cloudflare Pages (Frontend)
-  ↓
-Worker API (/api/chat)
-  ↓
-Durable Object (Chat Memory)
-  ↓
-LLM (OpenAI or Workers AI)
+OpenAI API (streaming completion)
 ```
 
----
+## Monorepo layout
 
-## Project Structure
+This repo is an **npm workspace** with three packages:
+
+| Package | Role |
+|---------|------|
+| **`@cf-ai/shared`** | Types, allowed models/modes, token bounds, `SYSTEM_PROMPTS`, UI labels (`MODES`, `MODELS`) |
+| **`frontend`** | Vite + React chat UI and streaming client |
+| **`worker`** | Cloudflare Worker entry, `POST /chat` handler, Durable Object class |
+
+Root scripts (run from the repo root after `npm install`):
+
+| Script | What it does |
+|--------|----------------|
+| `npm run dev:frontend` | Start the Vite dev server |
+| `npm run build:frontend` | Production build → `frontend/dist` |
+| `npm run deploy:dev` | Deploy Worker to the **dev** environment |
+| `npm run deploy:prod` | Deploy Worker to **production** |
+| `npm run typecheck` | Typecheck all workspaces that define `typecheck` |
+
+## Project structure
 
 ```text
-public/
-├── index.html          # Chat UI
-├── app.js              # Frontend logic
-├── styles.css
-└── functions/
-    └── api/
-        └── chat.ts     # Chat endpoint (Pages Functions / Worker entry)
-src/
-├── chatMemoryDO.ts     # Durable Object implementation
-└── worker.ts           # Worker logic (if used as separate entry)
-wrangler.toml
-```
+package.json              # workspaces: shared, worker, frontend
 
----
+shared/                   # @cf-ai/shared — imported by frontend + worker
+  package.json
+  tsconfig.json
+  src/index.ts            # modes, models, ChatRequestBody, SYSTEM_PROMPTS, …
+
+frontend/
+  package.json
+  tsconfig.json
+  index.html
+  vite.config.ts
+  src/
+    main.tsx              # React entry
+    App.tsx               # Chat UI, settings, streaming fetch()
+    styles.css
+    vite-env.d.ts         # VITE_API_URL typing
+
+worker/
+  package.json
+  wrangler.toml           # DO bindings + migrations (dev + production)
+  tsconfig.json
+  src/
+    index.ts              # Worker fetch router, CORS, exports ChatMemoryDO
+    routes/chat.ts        # OpenAI streaming, memory stub, validation
+    chatMemoryDO.ts       # Durable Object: GET /history, POST /append
+```
 
 ## Requirements
 
-* Cloudflare account
-* Node.js >= 18
-* Wrangler CLI
+- **Node.js** >= 18
+- **Wrangler** (via `npx wrangler` in `worker/`, or a global install)
+- **Cloudflare account** (for deployment)
+
+## Configuration
+
+### Worker secret: `OPENAI_API_KEY`
 
 ```bash
-npm install -g wrangler
-wrangler login
+cd worker
+npx wrangler secret put OPENAI_API_KEY --env dev
+npx wrangler secret put OPENAI_API_KEY --env production
 ```
 
----
-
-## Environment Setup
-
-Store your API key securely as a Cloudflare secret:
+For local dev, create **`worker/.dev.vars`** (gitignored):
 
 ```bash
-wrangler secret put OPENAI_API_KEY
+OPENAI_API_KEY=sk-...
 ```
 
-## Durable Object Configuration
+### Frontend: Worker URL (`VITE_API_URL`)
 
-Add this to `wrangler.toml`:
+The app posts to whatever URL you set in **`VITE_API_URL`**. It must be the **full URL to the chat endpoint**, including the path, for example:
 
-```toml
-durable_objects = { bindings = [
-  { name = "CHAT_MEMORY", class_name = "ChatMemoryDO" }
-] }
+- Local: `http://127.0.0.1:8787/chat`
+- Deployed: `https://your-worker.example.workers.dev/chat`
 
-migrations = [
-  { tag = "v1", new_classes = ["ChatMemoryDO"] }
-]
-```
-
----
-
-## Local Development
+Use a Vite env file (e.g. **`frontend/.env.local`**, gitignored by `.env*.local` patterns):
 
 ```bash
-wrangler pages dev public
+VITE_API_URL=http://127.0.0.1:8787/chat
 ```
 
----
+Vite only exposes variables prefixed with `VITE_`. After changing env files, restart the dev server.
+
+## Local development
+
+Install dependencies once from the **repository root** (links workspaces):
+
+```bash
+npm install
+```
+
+Then run the Worker and the UI in two terminals.
+
+### 1) Worker (API)
+
+```bash
+cd worker
+npx wrangler dev --env dev
+```
+
+Note the URL (often `http://127.0.0.1:8787`) and set `VITE_API_URL` to that origin + `/chat`.
+
+### 2) Frontend (UI)
+
+```bash
+cd frontend
+npm run dev
+```
+
+Or from root: `npm run dev:frontend`.
+
+## API
+
+### `POST /chat`
+
+- **Headers**
+  - `Content-Type: application/json`
+  - `X-Session-Id: <string>` (required) — stable id per browser session; drives which Durable Object stores history
+- **Body**
+
+```json
+{
+  "message": "Hello!",
+  "mode": "general",
+  "model": "gpt-4o-mini",
+  "maxTokens": 1024
+}
+```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `message` | string | *(required)* | The user's message |
+| `mode` | string | `"general"` | `general`, `teaching`, `coding`, `writing`, `creative` |
+| `model` | string | `"gpt-4o-mini"` | Must be one of the allowed models in `@cf-ai/shared`; invalid values fall back to the default |
+| `maxTokens` | number | `150` | Max completion tokens, clamped to **50–4096** (`shared` constants). The UI initializes its slider higher; omitted API calls use the package default |
+
+Response body is streamed as **`text/plain; charset=utf-8`** (raw token text, not SSE).
+
+### Other routes (Worker)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/`, `/health` | JSON `{ "ok": true }` health check |
+| `OPTIONS` | `*` | CORS preflight |
 
 ## Deployment
 
-Deploy the Worker (includes Durable Objects bindings):
+### Worker
 
 ```bash
-wrangler deploy --env production
+cd worker
+npm run deploy:dev          # → chatbot-dev
+npm run deploy:prod         # → chatbot (production)
 ```
 
-Deploy the Pages frontend:
+Or:
 
 ```bash
-wrangler pages deploy public
+npx wrangler deploy --env dev
+npx wrangler deploy --env production
 ```
 
-After deployment, your chatbot will be live at your Cloudflare Pages URL.
+> **Note:** `npm run deploy --env=dev` does **not** work — npm consumes `--env`. Use `npm run deploy:dev` or `npx wrangler deploy --env dev`.
 
----
+Set `OPENAI_API_KEY` for each environment (`wrangler secret put …`) after deploy if needed.
+
+### Frontend
+
+Build static assets, then host **`frontend/dist`** (Cloudflare Pages, R2 + Workers, etc.):
+
+```bash
+cd frontend
+npm run build
+```
+
+Configure **`VITE_API_URL`** at build time (e.g. Pages project env var) so production points at your deployed Worker’s `/chat` URL.
 
 ## Roadmap
 
-* Voice input/output
-* Long-term memory summarization
-* Model routing (OpenAI / Workers AI)
-* Rate limiting and authentication
-
----
+- Durable Object memory summarization / long-term memory
+- Rate limiting + auth
+- Voice input/output
+- Markdown rendering in chat messages
 
 ## License
 
 MIT
-
----
 
 ## Author
 

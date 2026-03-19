@@ -1,0 +1,19 @@
+{
+  "name": "chatbot",
+  "version": "0.1.2",
+  "scripts": {
+    "build": "echo \"No build step required\"",
+    "deploy": "wrangler deploy",
+    "deploy:dev": "wrangler deploy --env dev",
+    "deploy:prod": "wrangler deploy --env production",
+    "tail:dev": "wrangler tail --env dev --format json"
+  },
+  "dependencies": {
+    "@cf-ai/shared": "*",
+    "openai": "^6.15.0"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20251210.0",
+    "wrangler": "^4.54.0"
+  }
+}
