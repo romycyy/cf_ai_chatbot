@@ -10,49 +10,82 @@ A serverless AI chatbot with a **React (Vite) frontend** and a **Cloudflare Work
 - **Model selection**: pick from GPT-4o Mini, GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo, or o1-mini via a settings side panel
 - **Max tokens control**: adjust the response length (50–4096 tokens) with a slider
 - **Conversation preservation**: switching models or modes mid-conversation is seamless — history is stored independently and the new model continues from where the previous one left off
-- **Secure secret storage**: `OPENAI_API_KEY` is stored as a Cloudflare secret (or `.dev.vars` locally)
+- **Shared contract**: `@cf-ai/shared` keeps modes, models, limits, and system prompts aligned between the UI and Worker
+- **Secure secret storage**: `OPENAI_API_KEY` is stored as a Cloudflare secret (or `worker/.dev.vars` locally)
 
 ## Architecture
 
 ```text
-Browser (Vite React)
+Browser (Vite + React)
   ↓  POST /chat  { message, mode, model, maxTokens }
+  ↓  Header: X-Session-Id
 Cloudflare Worker
-  ↓  fetch() internal DO endpoints
-Durable Object (ChatMemoryDO)
+  ↓  stub.fetch() → Durable Object (per session)
+Durable Object (ChatMemoryDO)  ←→  persistent message list
   ↓
-OpenAI API
+OpenAI API (streaming completion)
 ```
 
-## Project Structure
+## Monorepo layout
+
+This repo is an **npm workspace** with three packages:
+
+| Package | Role |
+|---------|------|
+| **`@cf-ai/shared`** | Types, allowed models/modes, token bounds, `SYSTEM_PROMPTS`, UI labels (`MODES`, `MODELS`) |
+| **`frontend`** | Vite + React chat UI and streaming client |
+| **`worker`** | Cloudflare Worker entry, `POST /chat` handler, Durable Object class |
+
+Root scripts (run from the repo root after `npm install`):
+
+| Script | What it does |
+|--------|----------------|
+| `npm run dev:frontend` | Start the Vite dev server |
+| `npm run build:frontend` | Production build → `frontend/dist` |
+| `npm run deploy:dev` | Deploy Worker to the **dev** environment |
+| `npm run deploy:prod` | Deploy Worker to **production** |
+| `npm run typecheck` | Typecheck all workspaces that define `typecheck` |
+
+## Project structure
 
 ```text
-frontend/                 # Vite + React UI
-  src/
-    App.tsx               # Chat UI, mode bar, settings panel, streaming client
-    styles.css            # All styles (chat, mode bar, settings panel)
+package.json              # workspaces: shared, worker, frontend
+
+shared/                   # @cf-ai/shared — imported by frontend + worker
+  package.json
+  tsconfig.json
+  src/index.ts            # modes, models, ChatRequestBody, SYSTEM_PROMPTS, …
+
+frontend/
+  package.json
+  tsconfig.json
   index.html
   vite.config.ts
-
-worker/                   # Cloudflare Worker + Durable Object
   src/
-    index.ts              # Worker entry; routes POST /chat, CORS
-    routes/chat.ts        # Streaming OpenAI call; mode/model/token handling
-    chatMemoryDO.ts       # Durable Object: /history, /append, /reset
-  wrangler.toml           # DO bindings + migrations (dev + production envs)
+    main.tsx              # React entry
+    App.tsx               # Chat UI, settings, streaming fetch()
+    styles.css
+    vite-env.d.ts         # VITE_API_URL typing
+
+worker/
+  package.json
+  wrangler.toml           # DO bindings + migrations (dev + production)
+  tsconfig.json
+  src/
+    index.ts              # Worker fetch router, CORS, exports ChatMemoryDO
+    routes/chat.ts        # OpenAI streaming, memory stub, validation
+    chatMemoryDO.ts       # Durable Object: GET /history, POST /append
 ```
 
 ## Requirements
 
 - **Node.js** >= 18
-- **Wrangler CLI** (via `npx wrangler` or global install)
+- **Wrangler** (via `npx wrangler` in `worker/`, or a global install)
 - **Cloudflare account** (for deployment)
 
 ## Configuration
 
 ### Worker secret: `OPENAI_API_KEY`
-
-Set it for the target environment:
 
 ```bash
 cd worker
@@ -60,46 +93,63 @@ npx wrangler secret put OPENAI_API_KEY --env dev
 npx wrangler secret put OPENAI_API_KEY --env production
 ```
 
-For local dev, you can also create `worker/.dev.vars`:
+For local dev, create **`worker/.dev.vars`** (gitignored):
 
 ```bash
 OPENAI_API_KEY=sk-...
 ```
 
-### Frontend API URL
+### Frontend: Worker URL (`VITE_API_URL`)
 
-The frontend calls `POST /chat` against the URL defined in `API_URL` inside `App.tsx`. Update it to match your Worker's public URL when deploying.
+The app posts to whatever URL you set in **`VITE_API_URL`**. It must be the **full URL to the chat endpoint**, including the path, for example:
 
-## Local Development
+- Local: `http://127.0.0.1:8787/chat`
+- Deployed: `https://your-worker.example.workers.dev/chat`
 
-Run the backend and frontend in two terminals.
+Use a Vite env file (e.g. **`frontend/.env.local`**, gitignored by `.env*.local` patterns):
 
-### 1) Start the Worker (API)
+```bash
+VITE_API_URL=http://127.0.0.1:8787/chat
+```
+
+Vite only exposes variables prefixed with `VITE_`. After changing env files, restart the dev server.
+
+## Local development
+
+Install dependencies once from the **repository root** (links workspaces):
+
+```bash
+npm install
+```
+
+Then run the Worker and the UI in two terminals.
+
+### 1) Worker (API)
 
 ```bash
 cd worker
-npm install
 npx wrangler dev --env dev
 ```
 
-Wrangler will print the local URL (typically `http://127.0.0.1:8787`).
+Note the URL (often `http://127.0.0.1:8787`) and set `VITE_API_URL` to that origin + `/chat`.
 
-### 2) Start the Frontend (UI)
+### 2) Frontend (UI)
 
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
+
+Or from root: `npm run dev:frontend`.
 
 ## API
 
 ### `POST /chat`
 
-- **Headers**:
+- **Headers**
   - `Content-Type: application/json`
-  - `X-Session-Id: <uuid>` (required)
-- **Body**:
+  - `X-Session-Id: <string>` (required) — stable id per browser session; drives which Durable Object stores history
+- **Body**
 
 ```json
 {
@@ -113,15 +163,22 @@ npm run dev
 | Field | Type | Default | Description |
 |-------|------|---------|-------------|
 | `message` | string | *(required)* | The user's message |
-| `mode` | string | `"general"` | One of: `general`, `teaching`, `coding`, `writing`, `creative` |
-| `model` | string | `"gpt-4o-mini"` | One of: `gpt-4o-mini`, `gpt-4o`, `gpt-4-turbo`, `gpt-3.5-turbo`, `o1-mini` |
-| `maxTokens` | number | `1024` | Max completion tokens (clamped to 50–4096) |
+| `mode` | string | `"general"` | `general`, `teaching`, `coding`, `writing`, `creative` |
+| `model` | string | `"gpt-4o-mini"` | Must be one of the allowed models in `@cf-ai/shared`; invalid values fall back to the default |
+| `maxTokens` | number | `150` | Max completion tokens, clamped to **50–4096** (`shared` constants). The UI initializes its slider higher; omitted API calls use the package default |
 
-Response is streamed as `text/plain; charset=utf-8`.
+Response body is streamed as **`text/plain; charset=utf-8`** (raw token text, not SSE).
+
+### Other routes (Worker)
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/`, `/health` | JSON `{ "ok": true }` health check |
+| `OPTIONS` | `*` | CORS preflight |
 
 ## Deployment
 
-### Deploy the Worker
+### Worker
 
 ```bash
 cd worker
@@ -129,23 +186,27 @@ npm run deploy:dev          # → chatbot-dev
 npm run deploy:prod         # → chatbot (production)
 ```
 
-Or directly:
+Or:
 
 ```bash
 npx wrangler deploy --env dev
 npx wrangler deploy --env production
 ```
 
-> **Note:** `npm run deploy --env=dev` does **not** work — npm absorbs the flag. Use `npm run deploy:dev` or call `npx wrangler deploy --env dev` directly.
+> **Note:** `npm run deploy --env=dev` does **not** work — npm consumes `--env`. Use `npm run deploy:dev` or `npx wrangler deploy --env dev`.
 
-### Deploy the Frontend
+Set `OPENAI_API_KEY` for each environment (`wrangler secret put …`) after deploy if needed.
 
-Build the frontend and deploy `frontend/dist` to your static host of choice (Cloudflare Pages recommended).
+### Frontend
+
+Build static assets, then host **`frontend/dist`** (Cloudflare Pages, R2 + Workers, etc.):
 
 ```bash
 cd frontend
 npm run build
 ```
+
+Configure **`VITE_API_URL`** at build time (e.g. Pages project env var) so production points at your deployed Worker’s `/chat` URL.
 
 ## Roadmap
 
