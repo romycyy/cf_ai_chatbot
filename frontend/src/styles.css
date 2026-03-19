@@ -8,6 +8,16 @@ body {
   align-items: center;
 }
 
+/* ---------- layout ---------- */
+
+.app-layout {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
 .chat-container {
   width: 500px;
   max-width: calc(100vw - 32px);
@@ -17,7 +27,80 @@ body {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  z-index: 1;
 }
+
+/* ---------- top bar (modes + gear) ---------- */
+
+.top-bar {
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+  flex-shrink: 0;
+}
+
+.mode-bar {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  overflow-x: auto;
+  flex: 1;
+  min-width: 0;
+}
+
+.mode-btn {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid #ddd;
+  border-radius: 20px;
+  background: #f5f5f5;
+  color: #555;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.mode-btn:hover {
+  background: #e8f0fe;
+  border-color: #b0c9f5;
+  color: #333;
+}
+
+.mode-btn.active {
+  background: #007bff;
+  border-color: #007bff;
+  color: #fff;
+}
+
+.mode-icon {
+  font-size: 14px;
+}
+
+.settings-toggle {
+  flex-shrink: 0;
+  margin: 0 8px 0 0;
+  padding: 6px 10px;
+  font-size: 18px;
+  background: transparent;
+  border: none;
+  color: #666;
+  cursor: pointer;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.settings-toggle:hover {
+  background: #f0f0f0;
+  color: #333;
+}
+
+/* ---------- messages ---------- */
 
 .messages {
   flex: 1;
@@ -52,13 +135,15 @@ body {
   border-bottom-left-radius: 4px;
 }
 
+/* ---------- input bar ---------- */
+
 .input-bar {
   display: flex;
   padding: 10px;
   border-top: 1px solid #ddd;
 }
 
-input {
+.input-bar input {
   flex: 1;
   padding: 10px;
   font-size: 15px;
@@ -66,7 +151,7 @@ input {
   border: 1px solid #ccc;
 }
 
-button {
+.input-bar button {
   margin-left: 8px;
   padding: 10px 16px;
   font-size: 15px;
@@ -77,3 +162,138 @@ button {
   cursor: pointer;
 }
 
+/* ---------- settings side panel ---------- */
+
+.settings-panel {
+  position: fixed;
+  top: 50%;
+  right: -300px;
+  transform: translateY(-50%);
+  width: 280px;
+  max-height: 90vh;
+  background: #fff;
+  border-radius: 12px 0 0 12px;
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+  overflow-y: auto;
+  transition: right 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.settings-panel.open {
+  right: 0;
+}
+
+.panel-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.15);
+  z-index: 9;
+}
+
+.panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 18px 12px;
+  border-bottom: 1px solid #eee;
+}
+
+.panel-header h3 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.panel-close {
+  background: none;
+  border: none;
+  font-size: 22px;
+  color: #888;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.panel-close:hover {
+  color: #333;
+}
+
+/* ---------- panel sections ---------- */
+
+.panel-section {
+  padding: 16px 18px;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+.panel-section:last-child {
+  border-bottom: none;
+}
+
+.panel-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #555;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 10px;
+}
+
+/* ---------- model selector ---------- */
+
+.model-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  margin-bottom: 6px;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  background: #fafafa;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: left;
+  font-size: 14px;
+  color: #333;
+}
+
+.model-option:hover {
+  background: #e8f0fe;
+  border-color: #b0c9f5;
+}
+
+.model-option.active {
+  background: #e8f0fe;
+  border-color: #007bff;
+}
+
+.model-name {
+  font-weight: 600;
+}
+
+.model-desc {
+  font-size: 11px;
+  color: #888;
+}
+
+.model-option.active .model-desc {
+  color: #5a8fd4;
+}
+
+/* ---------- token slider ---------- */
+
+.token-slider {
+  width: 100%;
+  margin: 4px 0 6px;
+  accent-color: #007bff;
+}
+
+.token-range-labels {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11px;
+  color: #999;
+}

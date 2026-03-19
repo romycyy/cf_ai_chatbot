@@ -6,15 +6,17 @@ A serverless AI chatbot with a **React (Vite) frontend** and a **Cloudflare Work
 
 - **Streaming chat**: tokens are streamed from the Worker to the browser via `ReadableStream`
 - **Session memory**: conversation history is stored per session in a Durable Object (`CHAT_MEMORY`)
-- **Stateless UI** + **stateful backend**: frontend is static; the Worker + DO hold memory
-- **Simple controls UI**: model / max tokens / mode selectors in the sidebar (note: backend currently uses a fixed model)
+- **Mode selection**: choose a conversation mode (General, Teaching, Coding, Writing, Creative) — each mode uses a tailored system prompt
+- **Model selection**: pick from GPT-4o Mini, GPT-4o, GPT-4 Turbo, GPT-3.5 Turbo, or o1-mini via a settings side panel
+- **Max tokens control**: adjust the response length (50–4096 tokens) with a slider
+- **Conversation preservation**: switching models or modes mid-conversation is seamless — history is stored independently and the new model continues from where the previous one left off
 - **Secure secret storage**: `OPENAI_API_KEY` is stored as a Cloudflare secret (or `.dev.vars` locally)
 
 ## Architecture
 
 ```text
 Browser (Vite React)
-  ↓  POST /chat  (streams text/plain)
+  ↓  POST /chat  { message, mode, model, maxTokens }
 Cloudflare Worker
   ↓  fetch() internal DO endpoints
 Durable Object (ChatMemoryDO)
@@ -27,16 +29,15 @@ OpenAI API
 ```text
 frontend/                 # Vite + React UI
   src/
-    components/           # ChatWindow, MessageInput, Settings panel, etc.
-    context/              # Persisted chat settings (model/maxTokens/mode/sessionId)
-    hooks/                # Streaming client + persisted state
+    App.tsx               # Chat UI, mode bar, settings panel, streaming client
+    styles.css            # All styles (chat, mode bar, settings panel)
   index.html
   vite.config.ts
 
 worker/                   # Cloudflare Worker + Durable Object
   src/
-    index.ts              # Worker entry; routes POST /chat
-    routes/chat.ts        # Streaming OpenAI call; reads/writes DO history
+    index.ts              # Worker entry; routes POST /chat, CORS
+    routes/chat.ts        # Streaming OpenAI call; mode/model/token handling
     chatMemoryDO.ts       # Durable Object: /history, /append, /reset
   wrangler.toml           # DO bindings + migrations (dev + production envs)
 ```
@@ -51,10 +52,11 @@ worker/                   # Cloudflare Worker + Durable Object
 
 ### Worker secret: `OPENAI_API_KEY`
 
-Set it for the target environment (recommended):
+Set it for the target environment:
 
 ```bash
 cd worker
+npx wrangler secret put OPENAI_API_KEY --env dev
 npx wrangler secret put OPENAI_API_KEY --env production
 ```
 
@@ -64,20 +66,9 @@ For local dev, you can also create `worker/.dev.vars`:
 OPENAI_API_KEY=sk-...
 ```
 
-### Frontend env: `VITE_API_BASE`
+### Frontend API URL
 
-The frontend calls:
-
-- `POST ${VITE_API_BASE}/chat`
-- with header `X-Session-Id` (persisted in the browser)
-
-Create `frontend/.env`:
-
-```bash
-VITE_API_BASE=http://127.0.0.1:8787
-```
-
-When deployed, set `VITE_API_BASE` to your Worker’s public URL (e.g. `https://your-worker.your-domain.com`).
+The frontend calls `POST /chat` against the URL defined in `API_URL` inside `App.tsx`. Update it to match your Worker's public URL when deploying.
 
 ## Local Development
 
@@ -111,23 +102,45 @@ npm run dev
 - **Body**:
 
 ```json
-{ "message": "Hello!" }
+{
+  "message": "Hello!",
+  "mode": "general",
+  "model": "gpt-4o-mini",
+  "maxTokens": 1024
+}
 ```
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `message` | string | *(required)* | The user's message |
+| `mode` | string | `"general"` | One of: `general`, `teaching`, `coding`, `writing`, `creative` |
+| `model` | string | `"gpt-4o-mini"` | One of: `gpt-4o-mini`, `gpt-4o`, `gpt-4-turbo`, `gpt-3.5-turbo`, `o1-mini` |
+| `maxTokens` | number | `1024` | Max completion tokens (clamped to 50–4096) |
 
 Response is streamed as `text/plain; charset=utf-8`.
 
 ## Deployment
 
-### Deploy the Worker (includes Durable Objects)
+### Deploy the Worker
 
 ```bash
 cd worker
+npm run deploy:dev          # → chatbot-dev
+npm run deploy:prod         # → chatbot (production)
+```
+
+Or directly:
+
+```bash
+npx wrangler deploy --env dev
 npx wrangler deploy --env production
 ```
 
+> **Note:** `npm run deploy --env=dev` does **not** work — npm absorbs the flag. Use `npm run deploy:dev` or call `npx wrangler deploy --env dev` directly.
+
 ### Deploy the Frontend
 
-Build the frontend with `VITE_API_BASE` pointing at your deployed Worker URL, then deploy `frontend/dist` to your static host of choice (Cloudflare Pages recommended).
+Build the frontend and deploy `frontend/dist` to your static host of choice (Cloudflare Pages recommended).
 
 ```bash
 cd frontend
@@ -137,9 +150,9 @@ npm run build
 ## Roadmap
 
 - Durable Object memory summarization / long-term memory
-- Use UI settings (model / max tokens / mode) end-to-end in the Worker
 - Rate limiting + auth
 - Voice input/output
+- Markdown rendering in chat messages
 
 ## License
 
